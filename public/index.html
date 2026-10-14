@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rewards App</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    :root {
+      --bg: #121214; --card: #1c1c1e; --primary: #0088cc;
+      --gold: #ffd700; --silver: #c0c0c0; --bronze: #cd7f32;
+      --text: #ffffff; --muted: #8e8e93;
+    }
+    body { margin: 0; font-family: sans-serif; background: var(--bg); color: var(--text); display: flex; flex-direction: column; height: 100vh; }
+    .header { padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; background: var(--card); }
+    .lang-btn { background: transparent; border: 1px solid var(--primary); color: var(--primary); padding: 4px 10px; border-radius: 6px; cursor: pointer; }
+    .content { flex: 1; padding: 16px; overflow-y: auto; display: none; }
+    .content.active { display: block; }
+    .ad-container { display: flex; justify-content: center; margin: 35px 0 20px 0; }
+    .ad-circle { width: 155px; height: 155px; border-radius: 50%; background: radial-gradient(circle, #0088cc, #005f8c); display: flex; align-items: center; justify-content: center; font-size: 1.2rem; font-weight: bold; cursor: pointer; box-shadow: 0 0 15px rgba(0,136,204,0.4); }
+    .ad-circle:active { transform: scale(0.95); }
+    .info-card { background: var(--card); padding: 14px; border-radius: 8px; border-right: 4px solid var(--primary); font-size: 0.9rem; color: var(--muted); line-height: 1.5; margin-top: 25px; }
+    .leader-row { display: flex; justify-content: space-between; padding: 12px; background: var(--card); border-radius: 8px; margin-bottom: 8px; }
+    .rank-1 { border: 1px solid var(--gold); }
+    .rank-2 { border: 1px solid var(--silver); }
+    .rank-3 { border: 1px solid var(--bronze); }
+    .input-box { width: 100%; padding: 10px; margin: 8px 0; background: #2c2c2e; border: none; border-radius: 6px; color: #fff; box-sizing: border-box; }
+    .btn { width: 100%; padding: 12px; background: var(--primary); border: none; border-radius: 6px; color: #fff; font-weight: bold; cursor: pointer; margin-top: 8px; }
+    .nav { display: flex; background: var(--card); border-top: 1px solid #2c2c2e; }
+    .nav-btn { flex: 1; padding: 14px 0; text-align: center; font-size: 0.85rem; color: var(--muted); cursor: pointer; }
+    .nav-btn.active { color: var(--primary); font-weight: bold; }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <div>الإعلانات المشاهدة: <strong id="ad-count">0</strong></div>
+    <button class="lang-btn" onclick="toggleLang()">EN</button>
+  </div>
+
+  <!-- الخانة 1: الرئيسية والمهام -->
+  <div id="tab-home" class="content active">
+    <div class="ad-container">
+      <div class="ad-circle" id="ad-btn" onclick="watchAd()">شاهد إعلان</div>
+    </div>
+    <div class="info-card" id="info-desc">
+      توزيع 90% من أرباح الإعلانات على أفضل 10 متصدرين أصحاب أعلى عدد مشاهدات.
+    </div>
+  </div>
+
+  <!-- الخانة 2: المتصدرين -->
+  <div id="tab-leaderboard" class="content">
+    <h3 id="lead-title">قائمة أفضل 10 متصدرين</h3>
+    <div id="leader-list">جاري التحميل...</div>
+  </div>
+
+  <!-- الخانة 3: الملف الشخصي والمحفظة -->
+  <div id="tab-profile" class="content">
+    <h3 id="prof-title">الملف الشخصي والمحفظة</h3>
+    <p>الرصيد: <strong>$0.00</strong></p>
+    <input type="text" id="wallet-addr" class="input-box" placeholder="عنوان محفظتك (USDT / TON)">
+    <input type="number" id="tx-amount" class="input-box" placeholder="المبلغ بالدولار">
+    <div style="display: flex; gap: 8px;">
+      <button class="btn" onclick="sendTx('withdraw')">طلب سحب</button>
+      <button class="btn" style="background: #34c759;" onclick="sendTx('deposit')">طلب إيداع</button>
+    </div>
+  </div>
+
+  <!-- شريط التنقل السفلي -->
+  <div class="nav">
+    <div class="nav-btn active" id="nav-1" onclick="showTab('home')">المهام</div>
+    <div class="nav-btn" id="nav-2" onclick="showTab('leaderboard')">المتصدرين</div>
+    <div class="nav-btn" id="nav-3" onclick="showTab('profile')">الملف الشخصي</div>
+  </div>
+
+  <script>
+    const tg = window.Telegram?.WebApp;
+    if (tg) tg.expand();
+    const userId = tg?.initDataUnsafe?.user?.id || 'demo_user';
+
+    function showTab(name) {
+      document.querySelectorAll('.content').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
+      document.getElementById('tab-' + name).classList.add('active');
+      if (name === 'leaderboard') loadLeaderboard();
+    }
+
+    async function watchAd() {
+      const res = await fetch('/api/watch-ad', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId })
+      });
+      const data = await res.json();
+      document.getElementById('ad-count').innerText = data.ads_watched;
+      alert('تم احتساب المشاهدة بنجاح!');
+    }
+
+    async function loadLeaderboard() {
+      const res = await fetch('/api/leaderboard');
+      const data = await res.json();
+      const list = document.getElementById('leader-list');
+      list.innerHTML = '';
+      data.forEach((u, i) => {
+        let cls = i === 0 ? 'rank-1' : (i === 1 ? 'rank-2' : (i === 2 ? 'rank-3' : ''));
+        list.innerHTML += `<div class="leader-row ${cls}"><span>#${i+1} ${u.name}</span><span>${u.ads_watched} إعلان</span></div>`;
+      });
+    }
+
+    async function sendTx(type) {
+      const amount = document.getElementById('tx-amount').value;
+      const details = document.getElementById('wallet-addr').value;
+      if (!amount || !details) return alert('يرجى ملء كافة الحقول');
+
+      const res = await fetch('/api/transaction', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, type, amount, details })
+      });
+      const data = await res.json();
+      alert(data.message);
+    }
+
+    let isEn = false;
+    function toggleLang() {
+      isEn = !isEn;
+      document.documentElement.dir = isEn ? 'ltr' : 'rtl';
+      document.querySelector('.lang-btn').innerText = isEn ? 'AR' : 'EN';
+      document.getElementById('ad-btn').innerText = isEn ? 'Watch Ad' : 'شاهد إعلان';
+      document.getElementById('nav-1').innerText = isEn ? 'Tasks' : 'المهام';
+      document.getElementById('nav-2').innerText = isEn ? 'Leaderboard' : 'المتصدرين';
+      document.getElementById('nav-3').innerText = isEn ? 'Profile' : 'الملف الشخصي';
+    }
+  </script>
+</body>
+</html>
